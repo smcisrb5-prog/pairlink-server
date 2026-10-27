@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PairLink Cloud - 智慧協作與遠端共享平台</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --accent-color: #38bdf8;
+            --text-main: #f8fafc;
+            --text-sub: #94a3b8;
+            --border-color: #334155;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 1.5rem;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+
+        header h1 {
+            font-size: 2rem;
+            color: var(--accent-color);
+            letter-spacing: 1px;
+        }
+
+        /* 狀態面板 */
+        .status-panel {
+            width: 100%;
+            max-width: 900px;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .status-panel {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .status-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .status-item span:first-child {
+            font-size: 0.75rem;
+            color: var(--text-sub);
+        }
+
+        .status-item span:last-child {
+            font-size: 0.9rem;
+            font-weight: bold;
+            color: var(--success);
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.2rem;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.2rem;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        .card h2 {
+            font-size: 1.1rem;
+            margin-bottom: 0.8rem;
+            color: var(--accent-color);
+        }
+
+        .input-group {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.8rem;
+        }
+
+        input {
+            flex: 1;
+            padding: 0.6rem 0.8rem;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: #0f172a;
+            color: #fff;
+            font-size: 0.95rem;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: var(--accent-color);
+        }
+
+        button {
+            padding: 0.6rem 1rem;
+            border-radius: 8px;
+            border: none;
+            background: var(--accent-color);
+            color: #0f172a;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        button.danger {
+            background: var(--danger);
+            color: #fff;
+        }
+
+        .code-display {
+            font-size: 1.8rem;
+            font-weight: bold;
+            letter-spacing: 6px;
+            text-align: center;
+            padding: 0.8rem;
+            background: #0f172a;
+            border-radius: 8px;
+            color: var(--accent-color);
+            border: 1px dashed var(--border-color);
+            margin-bottom: 0.8rem;
+        }
+
+        .file-box {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 1.2rem;
+            text-align: center;
+            cursor: pointer;
+            margin-top: 0.8rem;
+            transition: border-color 0.2s;
+        }
+
+        .file-box:hover {
+            border-color: var(--accent-color);
+        }
+
+        .video-container {
+            grid-column: 1 / -1;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.2rem;
+        }
+
+        .screen-wrapper {
+            position: relative;
+            width: 100%;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 300px;
+        }
+
+        #remoteScreenImg {
+            width: 100%;
+            max-height: 500px;
+            object-fit: contain;
+            display: block;
+        }
+
+        #log {
+            width: 100%;
+            max-width: 900px;
+            margin-top: 1.2rem;
+            background: #0f172a;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 0.8rem;
+            height: 120px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: var(--text-sub);
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>☁️ PairLink Cloud</h1>
+    </header>
+
+    <!-- 狀態與任務面板 -->
+    <div class="status-panel">
+        <div class="status-item">
+            <span>伺服器狀態</span>
+            <span id="uiSignalingStatus">正在連線...</span>
+        </div>
+        <div class="status-item">
+            <span>本機裝置名稱</span>
+            <span id="uiLocalName">Home PC</span>
+        </div>
+        <div class="status-item">
+            <span>連線對象</span>
+            <span id="uiPeerStatus">尚未配對</span>
+        </div>
+        <div class="status-item" style="grid-column: 1 / -1; border-top: 1px solid var(--border-color); padding-top: 8px; margin-top: 4px;">
+            <span>目前任務狀態</span>
+            <span id="uiTaskStatus" style="color: var(--warning);">系統就緒，等待連線與操作...</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- 裝置命名設定 -->
+        <div class="card" style="grid-column: 1 / -1;">
+            <h2>本機裝置設定</h2>
+            <div class="input-group">
+                <input type="text" id="deviceNameInput" value="Home PC" placeholder="輸入裝置名稱 (例如：Home PC, My Phone, Office PC)">
+                <button onclick="updateDeviceName()">儲存名稱</button>
+            </div>
+        </div>
+
+        <!-- 4位配對碼 -->
+        <div class="card">
+            <h2>我的 4 位配對碼</h2>
+            <div id="myRoomId" class="code-display">----</div>
+            <p style="font-size: 0.8rem; color: var(--text-sub);">將此 4 位數字提供給遠端裝置進行連線。</p>
+        </div>
+
+        <!-- 連線遠端 -->
+        <div class="card">
+            <h2>連線至遠端裝置</h2>
+            <div class="input-group">
+                <input type="text" id="targetRoomInput" placeholder="輸入 4 位配對碼" maxlength="4">
+                <button onclick="connectToPeer()">發起連線</button>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--text-sub);">支援跨區域、跨網路安全安全中繼連線。</p>
+        </div>
+
+        <!-- 檔案傳輸 -->
+        <div class="card">
+            <h2>雲端檔案傳輸</h2>
+            <div class="file-box" onclick="document.getElementById('fileInput').click()">
+                <p style="font-size: 0.9rem;">📄 點擊選擇或拖曳檔案至此發送</p>
+                <input type="file" id="fileInput" style="display: none;" onchange="sendFile(this.files[0])">
+            </div>
+        </div>
+
+        <!-- 畫面共享控制 -->
+        <div class="card">
+            <h2>雲端畫面共享</h2>
+            <div style="display: flex; gap: 0.5rem; flex-direction: column;">
+                <button id="screenShareBtn" onclick="toggleScreenShare()">🖥️ 開始畫面共享</button>
+            </div>
+            <p style="font-size: 0.8rem; color: var(--text-sub); margin-top: 0.8rem;">透過雲端中繼即時串流桌面畫面。</p>
+        </div>
+
+        <!-- 遠端畫面顯示區 -->
+        <div class="video-container">
+            <h2>遠端畫面顯示 <span id="screenMode" style="font-size: 0.8rem; color: var(--warning);">(等待接收中...)</span></h2>
+            <div class="screen-wrapper">
+                <img id="remoteScreenImg" alt="等待遠端共享畫面..." />
+            </div>
+        </div>
+    </div>
+
+    <div id="log"></div>
+
+    <script>
+        const SIGNALING_SERVER = "https://pairlink-server.onrender.com";
+
+        let socket;
+        let roomId;
+        let currentTargetPeerId = null;
+        let targetDeviceName = "遠端裝置";
+        let localStream = null;
+        let screenInterval = null;
+        let isSharing = false;
+
+        function log(msg) {
+            const logDiv = document.getElementById("log");
+            if (!logDiv) return;
+            const time = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${time}] ${msg}<br>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateStatus(sigText, peerText) {
+            document.getElementById("uiSignalingStatus").innerText = sigText;
+            document.getElementById("uiPeerStatus").innerText = peerText;
+        }
+
+        function updateTaskStatus(msg, color = "#f59e0b") {
+            const taskEl = document.getElementById("uiTaskStatus");
+            if (taskEl) {
+                taskEl.innerText = msg;
+                taskEl.style.color = color;
+            }
+        }
+
+        function getMyDeviceName() {
+            const name = document.getElementById("deviceNameInput").value.trim();
+            const finalName = name || "Home PC";
+            document.getElementById("uiLocalName").innerText = finalName;
+            return finalName;
+        }
+
+        function updateDeviceName() {
+            const name = getMyDeviceName();
+            log(`✅ 已更新本機裝置名稱為：${name}`);
+            updateTaskStatus(`已更新本機裝置名稱為：${name}`, "#22c55e");
+            if (socket && roomId) {
+                socket.emit('update-device-name', { roomId, deviceName: name });
+            }
+        }
+
+        function initCloudConnection() {
+            log("正在連線至雲端伺服器...");
+            updateStatus("連線中...", "等待配對");
+            updateTaskStatus("正在連線至雲端伺服器...", "#f59e0b");
+
+            socket = io(SIGNALING_SERVER);
+
+            socket.on("connect", () => {
+                updateStatus("已連線", "等待配對");
+                updateTaskStatus("已連線至雲端信令中心，等待輸入配對碼", "#22c55e");
+                log("成功連線至雲端伺服器，ID: " + socket.id);
+
+                roomId = Math.floor(1000 + Math.random() * 9000).toString();
+                document.getElementById("myRoomId").innerText = roomId;
+                
+                socket.emit("join-room", { roomId, deviceName: getMyDeviceName() });
+            });
+
+            socket.on("connect_error", (err) => {
+                updateStatus("連線失敗/喚醒中", "離線");
+                updateTaskStatus("雲端伺服器連線失敗或正在喚醒中...", "#ef4444");
+                log("連線錯誤 (Render 免費服務喚醒中): " + err.message);
+            });
+
+            socket.on("peer-joined", ({ peerId, deviceName }) => {
+                currentTargetPeerId = peerId;
+                targetDeviceName = deviceName || "遠端裝置";
+                updateStatus("已連線", targetDeviceName);
+                updateTaskStatus(`已成功與「${targetDeviceName}」建立連線`, "#22c55e");
+                log(`🎉 成功與裝置 [${targetDeviceName}] 建立連線！`);
+            });
+
+            socket.on("peer-device-updated", ({ peerId, deviceName }) => {
+                if (peerId === currentTargetPeerId) {
+                    targetDeviceName = deviceName || "遠端裝置";
+                    updateStatus("已連線", targetDeviceName);
+                    updateTaskStatus(`遠端裝置已更名為「${targetDeviceName}」`, "#22c55e");
+                    log(`ℹ️ 遠端裝置更新名稱為：${targetDeviceName}`);
+                }
+            });
+
+            socket.on("relay-file", ({ fileName, fileData, fileType, senderName }) => {
+                const sourceName = senderName || "遠端裝置";
+                updateTaskStatus(`正在接收來自「${sourceName}」的檔案：${fileName}...`, "#f59e0b");
+                log(`📥 收到來自 [${sourceName}] 的檔案：${fileName}`);
+                
+                const blob = new Blob([fileData], { type: fileType });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = fileName;
+                a.click();
+                
+                updateTaskStatus(`已成功接收並下載來自「${sourceName}」的檔案：${fileName}`, "#22c55e");
+            });
+
+            socket.on("relay-screen-frame", ({ frame, senderName }) => {
+                const sourceName = senderName || "遠端裝置";
+                const img = document.getElementById("remoteScreenImg");
+                img.src = frame;
+                document.getElementById("screenMode").innerText = `(正在接收 ${sourceName} 的畫面)`;
+                document.getElementById("screenMode").style.color = "#22c55e";
+                updateTaskStatus(`正在接收來自「${sourceName}」的畫面串流`, "#22c55e");
+            });
+        }
+
+        function connectToPeer() {
+            const targetRoom = document.getElementById("targetRoomInput").value.trim();
+            if (!targetRoom || targetRoom.length !== 4) {
+                alert("請輸入有效的 4 位配對碼！");
+                return;
+            }
+            roomId = targetRoom;
+            document.getElementById("myRoomId").innerText = roomId;
+            
+            log(`正在加入房間 ${targetRoom}...`);
+            updateStatus("已連線", `正在加入 ${targetRoom}`);
+            updateTaskStatus(`正在向房間 ${targetRoom} 發起連線請求...`, "#f59e0b");
+            socket.emit("join-room", { roomId: targetRoom, deviceName: getMyDeviceName() });
+        }
+
+        function sendFile(file) {
+            if (!currentTargetPeerId) {
+                alert("尚未連線到任何對端裝置，請先輸入 4 位配對碼進行連線！");
+                return;
+            }
+
+            updateTaskStatus(`正在傳送檔案至「${targetDeviceName}」：${file.name}...`, "#f59e0b");
+            log(`📤 正在透過雲端中繼傳送檔案至 [${targetDeviceName}]：${file.name} (${file.size} bytes)...`);
+            
+            const reader = new FileReader();
+            reader.onload = () => {
+                socket.emit('relay-file', {
+                    targetPeerId: currentTargetPeerId,
+                    fileName: file.name,
+                    fileData: reader.result,
+                    fileType: file.type
+                });
+                updateTaskStatus(`已成功將檔案傳送至「${targetDeviceName}」`, "#22c55e");
+                log(`✅ 檔案已透過雲端中繼成功傳送至 [${targetDeviceName}]！`);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function toggleScreenShare() {
+            if (!isSharing) {
+                startScreenShare();
+            } else {
+                stopScreenShare();
+            }
+        }
+
+        async function startScreenShare() {
+            if (!currentTargetPeerId) {
+                alert("請先與遠端裝置建立連線（輸入 4 位配對碼）！");
+                return;
+            }
+            try {
+                updateTaskStatus(`正在向「${targetDeviceName}」發送畫面共享請求與串流...`, "#f59e0b");
+                localStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 5 }, audio: false });
+                
+                const video = document.createElement('video');
+                video.srcObject = localStream;
+                video.play();
+
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+
+                isSharing = true;
+                const btn = document.getElementById("screenShareBtn");
+                btn.innerText = "⏹️ 停止畫面共享";
+                btn.className = "danger";
+
+                log(`🖥️ 開始向 [${targetDeviceName}] 共享畫面...`);
+                document.getElementById("screenMode").innerText = `(正在向 ${targetDeviceName} 推送畫面)`;
+                document.getElementById("screenMode").style.color = "#22c55e";
+                updateTaskStatus(`正在向「${targetDeviceName}」共享畫面`, "#22c55e");
+
+                screenInterval = setInterval(() => {
+                    if (!localStream || !currentTargetPeerId) return;
+                    canvas.width = video.videoWidth / 2;
+                    canvas.height = video.videoHeight / 2;
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    
+                    const frameData = canvas.toDataURL('image/jpeg', 0.5);
+                    socket.emit('relay-screen', {
+                        targetPeerId: currentTargetPeerId,
+                        frame: frameData
+                    });
+                }, 200);
+
+                localStream.getVideoTracks()[0].onended = () => {
+                    stopScreenShare();
+                };
+            } catch (err) {
+                updateTaskStatus("畫面共享已取消或啟動失敗", "#ef4444");
+                log("啟動畫面共享失敗或使用者取消: " + err.message);
+            }
+        }
+
+        function stopScreenShare() {
+            if (screenInterval) {
+                clearInterval(screenInterval);
+                screenInterval = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            
+            isSharing = false;
+            const btn = document.getElementById("screenShareBtn");
+            btn.innerText = "🖥️ 開始畫面共享";
+            btn.className = "";
+
+            document.getElementById("screenMode").innerText = "(已停止共享)";
+            document.getElementById("screenMode").style.color = "#94a3b8";
+            
+            updateTaskStatus(`已停止向「${targetDeviceName}」的畫面共享`, "#94a3b8");
+            log(`⏹️ 已停止向 [${targetDeviceName}] 的畫面共享。`);
+        }
+
+        window.onload = initCloudConnection;
+    </script>
+</body>
+</html>
