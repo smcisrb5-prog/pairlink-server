@@ -8,7 +8,6 @@ app.use(cors());
 
 const server = http.createServer(app);
 
-// 初始化 Socket.io，放大缓冲区至 50MB 以支持大文件云端中继
 const io = new Server(server, {
     cors: {
         origin: "*",
@@ -17,29 +16,54 @@ const io = new Server(server, {
     maxHttpBufferSize: 50 * 1024 * 1024 
 });
 
+// 存储设备名称映射: socket.id -> deviceName
+const deviceNames = {};
+
 io.on('connection', (socket) => {
     console.log('用户已连接:', socket.id);
+    deviceNames[socket.id] = '网页设备';
 
-    // 加入 4 位配对码房间
-    socket.on('join-room', ({ roomId }) => {
+    // 加入房间并同步双端状态
+    socket.on('join-room', ({ roomId, deviceName }) => {
+        if (deviceName) {
+            deviceNames[socket.id] = deviceName;
+        }
         socket.join(roomId);
-        // 通知房间内的其他设备
-        socket.to(roomId).emit('peer-joined', { peerId: socket.id });
-        console.log(`用户 ${socket.id} 已加入房间: ${roomId}`);
+        console.log(`用户 ${socket.id} (${deviceNames[socket.id]}) 加入房间: ${roomId}`);
+
+        // 1. 通知房间内的其他老成员
+        socket.to(roomId).emit('peer-joined', { 
+            peerId: socket.id, 
+            deviceName: deviceNames[socket.id] 
+        });
+
+        // 2. 将房间里已存在的其他成员信息发给新加入的人（双向互通关键修复）
+        const socketsInRoom = io.sockets.adapter.rooms.get(roomId);
+        if (socketsInRoom) {
+            for (const clientId of socketsInRoom) {
+                if (clientId !== socket.id) {
+                    socket.emit('peer-joined', { 
+                        peerId: clientId, 
+                        deviceName: deviceNames[clientId] || '远端设备' 
+                    });
+                }
+            }
+        }
     });
 
-    // 1. 云端文件安全中继
+    // 文件中继
     socket.on('relay-file', ({ targetPeerId, fileName, fileData, fileType }) => {
         console.log(`正在通过云端中继向 ${targetPeerId} 转发文件: ${fileName}`);
         io.to(targetPeerId).emit('relay-file', { fileName, fileData, fileType });
     });
 
-    // 2. 云端屏幕画面帧中继 (Canvas 截图流)
+    // 屏幕共享帧中继
     socket.on('relay-screen', ({ targetPeerId, frame }) => {
         io.to(targetPeerId).emit('relay-screen-frame', { frame });
     });
 
     socket.on('disconnect', () => {
+        delete deviceNames[socket.id];
         console.log('用户已断开:', socket.id);
     });
 });
