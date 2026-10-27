@@ -16,59 +16,77 @@ const io = new Server(server, {
     maxHttpBufferSize: 50 * 1024 * 1024 
 });
 
-// 存储设备名称映射: socket.id -> deviceName
+// 儲存裝置名稱對應表: socket.id -> deviceName
 const deviceNames = {};
 
 io.on('connection', (socket) => {
-    console.log('用户已连接:', socket.id);
-    deviceNames[socket.id] = '网页设备';
+    console.log('使用者已連線:', socket.id);
+    deviceNames[socket.id] = '未命名裝置';
 
-    // 加入房间并同步双端状态
+    // 加入房間並同步雙端狀態
     socket.on('join-room', ({ roomId, deviceName }) => {
         if (deviceName) {
             deviceNames[socket.id] = deviceName;
         }
         socket.join(roomId);
-        console.log(`用户 ${socket.id} (${deviceNames[socket.id]}) 加入房间: ${roomId}`);
+        console.log(`使用者 ${socket.id} (${deviceNames[socket.id]}) 已加入房間: ${roomId}`);
 
-        // 1. 通知房间内的其他老成员
+        // 1. 通知房間內的舊成員
         socket.to(roomId).emit('peer-joined', { 
             peerId: socket.id, 
             deviceName: deviceNames[socket.id] 
         });
 
-        // 2. 将房间里已存在的其他成员信息发给新加入的人（双向互通关键修复）
+        // 2. 將房間內已存在的成員資訊回傳給新加入者
         const socketsInRoom = io.sockets.adapter.rooms.get(roomId);
         if (socketsInRoom) {
             for (const clientId of socketsInRoom) {
                 if (clientId !== socket.id) {
                     socket.emit('peer-joined', { 
                         peerId: clientId, 
-                        deviceName: deviceNames[clientId] || '远端设备' 
+                        deviceName: deviceNames[clientId] || '遠端裝置' 
                     });
                 }
             }
         }
     });
 
-    // 文件中继
-    socket.on('relay-file', ({ targetPeerId, fileName, fileData, fileType }) => {
-        console.log(`正在通过云端中继向 ${targetPeerId} 转发文件: ${fileName}`);
-        io.to(targetPeerId).emit('relay-file', { fileName, fileData, fileType });
+    // 裝置名稱即時更新
+    socket.on('update-device-name', ({ roomId, deviceName }) => {
+        if (deviceName) {
+            deviceNames[socket.id] = deviceName;
+            if (roomId) {
+                socket.to(roomId).emit('peer-device-updated', { peerId: socket.id, deviceName });
+            }
+        }
     });
 
-    // 屏幕共享帧中继
+    // 檔案中繼傳輸
+    socket.on('relay-file', ({ targetPeerId, fileName, fileData, fileType }) => {
+        console.log(`正在轉發檔案至 ${targetPeerId}: ${fileName}`);
+        io.to(targetPeerId).emit('relay-file', { 
+            fileName, 
+            fileData, 
+            fileType,
+            senderName: deviceNames[socket.id] || '遠端裝置'
+        });
+    });
+
+    // 畫面共享串流畫面中繼
     socket.on('relay-screen', ({ targetPeerId, frame }) => {
-        io.to(targetPeerId).emit('relay-screen-frame', { frame });
+        io.to(targetPeerId).emit('relay-screen-frame', { 
+            frame,
+            senderName: deviceNames[socket.id] || '遠端裝置'
+        });
     });
 
     socket.on('disconnect', () => {
         delete deviceNames[socket.id];
-        console.log('用户已断开:', socket.id);
+        console.log('使用者已斷線:', socket.id);
     });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`服务器正在监听端口 ${PORT}`);
+    console.log(`伺服器正在聆聽連接埠 ${PORT}`);
 });
