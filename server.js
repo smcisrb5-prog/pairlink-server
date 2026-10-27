@@ -8,7 +8,7 @@ app.use(cors());
 
 const server = http.createServer(app);
 
-// 初始化 Socket.io，并放宽单次传输限制至 50MB 以支持云端中继传文件
+// 初始化 Socket.io，放大缓冲区至 50MB 以支持大文件云端中继
 const io = new Server(server, {
     cors: {
         origin: "*",
@@ -20,21 +20,23 @@ const io = new Server(server, {
 io.on('connection', (socket) => {
     console.log('用户已连接:', socket.id);
 
+    // 加入 4 位配对码房间
     socket.on('join-room', ({ roomId }) => {
         socket.join(roomId);
         // 通知房间内的其他设备
         socket.to(roomId).emit('peer-joined', { peerId: socket.id });
+        console.log(`用户 ${socket.id} 已加入房间: ${roomId}`);
     });
 
-    // WebRTC 信令转发
-    socket.on('signal', ({ targetPeerId, signalData }) => {
-        io.to(targetPeerId).emit('signal', { senderPeerId: socket.id, signalData });
-    });
-
-    // 🌟 新增：当 WebRTC 失败时的云端文件安全中继兜底
+    // 1. 云端文件安全中继
     socket.on('relay-file', ({ targetPeerId, fileName, fileData, fileType }) => {
         console.log(`正在通过云端中继向 ${targetPeerId} 转发文件: ${fileName}`);
         io.to(targetPeerId).emit('relay-file', { fileName, fileData, fileType });
+    });
+
+    // 2. 云端屏幕画面帧中继 (Canvas 截图流)
+    socket.on('relay-screen', ({ targetPeerId, frame }) => {
+        io.to(targetPeerId).emit('relay-screen-frame', { frame });
     });
 
     socket.on('disconnect', () => {
